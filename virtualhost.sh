@@ -241,7 +241,7 @@ APACHE_PORT="80"
 
 # If you're satisfied with the version you have and do not wish to be reminded
 # of a new version, add the following line to your ~/.virtualhost.sh.conf file.
-#SKIP_VERSION_CHECK="yes"
+SKIP_VERSION_CHECK="yes"
 
 # We now will search your $DOC_ROOT_PREFIX for a matching subfolder using find.
 # By default, we will go two levels deep so that it doesn't take too long. If
