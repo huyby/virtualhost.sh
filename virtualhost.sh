@@ -192,8 +192,8 @@ OPEN_COMMAND="/usr/bin/open"
 #BROWSER="WebKit"
 #BROWSER="Google Chrome"
 
-# If defined, a ServerAlias os $1.$WILDCARD_ZONE will be added to the virtual
-# host file. This is useful if you, for example, have setup a wildcard domain
+# If defined, the ServerName is configured as $1.$WILDCARD_ZONE instead of $1.
+# This is useful if you, for example, have setup a wildcard domain
 # either on your own DNS server or using a server like dyndns.org. For example,
 # if my local IP of 10.0.42.42 is static (which can still be achieved using a
 # well-configured DHCP server or an Apple Airport Extreme 802.11n base station)
@@ -203,6 +203,9 @@ OPEN_COMMAND="/usr/bin/open"
 # that this would also work with a public IP too, and the virtual hosts on your
 # machine would be accessible to anyone on the internets.
 #WILDCARD_ZONE="my.wildcard.host.address"
+
+# Same as  WILDCARD_ZONE, but this is only added as a ServerAlias
+#WILDCARD_ALIAS_ZONE="my.wildcard.alias.address"
 
 # A feature to specify a custom log location within your site's document root
 # was requested, and so you will be prompted about this when you create a new
@@ -282,7 +285,12 @@ open_command()
 create_virtualhost()
 {
   if [ ! -z $WILDCARD_ZONE ]; then
-    SERVER_ALIAS="ServerAlias $1.$WILDCARD_ZONE"
+    SERVER_NAME="ServerName $1.$WILDCARD_ZONE"
+  else
+    SERVER_NAME="ServerName $1"
+  fi
+  if [ ! -z $WILDCARD_ALIAS_ZONE ]; then
+    SERVER_ALIAS="ServerAlias $1.$WILDCARD_ALIAS_ZONE"
   else
     SERVER_ALIAS="#ServerAlias your.alias.here"
   fi
@@ -309,11 +317,12 @@ create_virtualhost()
     touch $access_log $error_log
     chown $USER $access_log $error_log
   fi
+
   cat << __EOF >$APACHE_CONFIG/virtualhosts/$1
 # Created $date
 <VirtualHost *:$APACHE_PORT>
   DocumentRoot "$2"
-  ServerName $1
+  $SERVER_NAME
   $SERVER_ALIAS
 
   ScriptAlias /cgi-bin "$2/cgi-bin"
@@ -710,10 +719,14 @@ esac
 
 if ! checkyesno ${SKIP_ETC_HOSTS}; then
   if ! host_exists $VIRTUALHOST ; then
-
+    if [ ! -z $WILDCARD_ZONE ]; then
+      HOST=$1.$WILDCARD_ZONE
+    else
+      HOST=$1
+    fi
     /bin/echo "Creating a virtualhost for $VIRTUALHOST..."
     /bin/echo -n "+ Adding $VIRTUALHOST to /etc/hosts... "
-    /bin/echo "$IP_ADDRESS  $1" >> /etc/hosts
+    /bin/echo "$IP_ADDRESS  $HOST" >> /etc/hosts
     /bin/echo "done"
   fi
 fi
@@ -934,11 +947,19 @@ fi
 $APACHECTL graceful 1>/dev/null 2>/dev/null
 /bin/echo "done"
 
-cat << __EOF
+if [ ! -z $WILDCARD_ZONE ]; then
+  cat << __EOF
+
+http://$VIRTUALHOST.$WILDCARD_ZONE:$APACHE_PORT/ is setup and ready for use.
+
+__EOF
+else
+  cat << __EOF
 
 http://$VIRTUALHOST:$APACHE_PORT/ is setup and ready for use.
 
 __EOF
+fi
 
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
