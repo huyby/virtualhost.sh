@@ -234,6 +234,9 @@ HOME_PARTITION="/Users"
 # to be nagged about "fixing" your DocumentRoot, set this to "yes".
 SKIP_DOCUMENT_ROOT_CHECK="no"
 
+# The document root folder to use in your host
+DOCUMENT_ROOT_PUBLIC_FOLDER="public"
+
 # If Apache works on a different port than the default 80, set it here
 APACHE_PORT="80"
 
@@ -254,6 +257,10 @@ MAX_SEARCH_DEPTH=2
 # Set to "yes" if you don't have a browser (headless) or don't want the site
 # to be launched in your browser after the virtualhost is setup.
 #SKIP_BROWSER="yes"
+
+# Set to "yes" the script won't create a default index.html in the host's
+# document root
+SKIP_DOCUMENT_ROOT_DEFAULT_FILE="yes"
 
 # You can now store your configuration directions in a ~/.virtualhost.sh.conf
 # file so that you can download new versions of the script without having to
@@ -324,8 +331,6 @@ create_virtualhost()
   DocumentRoot "$2"
   $SERVER_NAME
   $SERVER_ALIAS
-
-  ScriptAlias /cgi-bin "$2/cgi-bin"
 
   <Directory "$2">
     Options All
@@ -747,8 +752,6 @@ else
   else
     if [ $MAX_SEARCH_DEPTH -eq 0 ]; then
       /bin/echo -n " searching with no a maximum depth. This could take a really long time..."
-    else
-      /bin/echo -n " searching to a maximum directory depth of $MAX_SEARCH_DEPTH. This could take some time..."
     fi
     nested_match=`find $DOC_ROOT_PREFIX -maxdepth $MAX_SEARCH_DEPTH -type d -name $VIRTUALHOST 2>/dev/null`
 
@@ -786,7 +789,7 @@ case $resp in
 
   *)
     if [ -d $DOC_ROOT_FOLDER_MATCH/public ]; then
-      /bin/echo -n "  - Found a public folder suggesting a Rails/Rack project. Use as DocumentRoot? [Y/n] "
+      /bin/echo -n "  - Found a public folder suggesting a Zend Framework project. Use as DocumentRoot? [Y/n] "
       if [ -z "$BATCH_MODE" ]; then
         read response
       else
@@ -811,8 +814,10 @@ case $resp in
       else
         FOLDER=$DOC_ROOT_FOLDER_MATCH
       fi
-    else
+    elif [ -z "$DOCUMENT_ROOT_PUBLIC_FOLDER"]; then
       FOLDER=$DOC_ROOT_FOLDER_MATCH
+    else
+      FOLDER=$DOC_ROOT_FOLDER_MATCH/$DOCUMENT_ROOT_PUBLIC_FOLDER
     fi
   ;;
 esac
@@ -860,7 +865,8 @@ fi
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # Create a default index.html if there isn't already one there
 #
-if [ ! -e "${FOLDER}/index.html" -a ! -e "${FOLDER}/index.php" ]; then
+if ! checkyesno ${SKIP_DOCUMENT_ROOT_DEFAULT_FILE} ; then
+    if [ ! -e "${FOLDER}/index.html" -a ! -e "${FOLDER}/index.php" ]; then
 
   cat << __EOF >"${FOLDER}/index.html"
 <html>
@@ -919,6 +925,7 @@ if [ ! -e "${FOLDER}/index.html" -a ! -e "${FOLDER}/index.php" ]; then
 __EOF
   chown $USER "${FOLDER}/index.html"
 
+    fi
 fi
 
 
