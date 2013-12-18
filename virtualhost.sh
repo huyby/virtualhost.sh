@@ -814,7 +814,7 @@ case $resp in
       else
         FOLDER=$DOC_ROOT_FOLDER_MATCH
       fi
-    elif [ -z "$DOCUMENT_ROOT_PUBLIC_FOLDER"]; then
+    elif [ -z "$DOCUMENT_ROOT_PUBLIC_FOLDER" ]; then
       FOLDER=$DOC_ROOT_FOLDER_MATCH
     else
       FOLDER=$DOC_ROOT_FOLDER_MATCH/$DOCUMENT_ROOT_PUBLIC_FOLDER
