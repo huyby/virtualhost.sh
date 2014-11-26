@@ -213,8 +213,8 @@ fi
 #BROWSER="WebKit"
 #BROWSER="Google Chrome"
 
-# If defined, a ServerAlias os $1.$WILDCARD_ZONE will be added to the virtual
-# host file. This is useful if you, for example, have set up a wildcard domain
+# If defined, the ServerName is configured as $1.$WILDCARD_ZONE instead of $1.
+# This is useful if you, for example, have setup a wildcard domain
 # either on your own DNS server or using a server like dyndns.org. For example,
 # if my local IP of 10.0.42.42 is static (which can still be achieved using a
 # well-configured DHCP server or an Apple Airport Extreme 802.11n base station)
@@ -224,6 +224,9 @@ fi
 # that this would also work with a public IP too, and the virtual hosts on your
 # machine would be accessible to anyone on the internets.
 #WILDCARD_ZONE="my.wildcard.host.address"
+
+# Same as  WILDCARD_ZONE, but this is only added as a ServerAlias
+#WILDCARD_ALIAS_ZONE="my.wildcard.alias.address"
 
 # A feature to specify a custom log location within your site's document root
 # was requested, and so you will be prompted about this when you create a new
@@ -252,6 +255,9 @@ fi
 # to be nagged about "fixing" your DocumentRoot, set this to "yes".
 : ${SKIP_DOCUMENT_ROOT_CHECK:="no"}
 
+# The document root folder to use in your host
+DOCUMENT_ROOT_PUBLIC_FOLDER="public"
+
 # If Apache works on a different port than the default 80, set it here
 : ${APACHE_PORT:="80"}
 
@@ -262,7 +268,7 @@ fi
 
 # If you're satisfied with the version you have and do not wish to be reminded
 # of a new version, add the following line to your ~/.virtualhost.sh.conf file.
-#SKIP_VERSION_CHECK="yes"
+SKIP_VERSION_CHECK="yes"
 
 # We now will search your $DOC_ROOT_PREFIX for a matching subfolder using find.
 # By default, we will go two levels deep so that it doesn't take too long. If
@@ -307,7 +313,12 @@ open_command()
 create_virtualhost()
 {
   if [ ! -z $WILDCARD_ZONE ]; then
-    SERVER_ALIAS="ServerAlias $VIRTUALHOST.$WILDCARD_ZONE"
+    SERVER_NAME="ServerName $VIRTUALHOST.$WILDCARD_ZONE"
+  else
+    SERVER_NAME="ServerName $VIRTUALHOST"
+  fi
+  if [ ! -z $WILDCARD_ALIAS_ZONE ]; then
+    SERVER_ALIAS="ServerAlias $VIRTUALHOST.$WILDCARD_ALIAS_ZONE"
   else
     SERVER_ALIAS="#ServerAlias your.alias.here"
   fi
@@ -320,8 +331,8 @@ create_virtualhost()
       # would love a pure shell way to do this, but sed makes it oh so hard
       LOG_FOLDER=`ruby -e "puts File.expand_path('$LOG_FOLDER'.gsub(/__DOCUMENT_ROOT__/, '$2'))"`
       log_folder_path=$LOG_FOLDER
-      access_log="${log_folder_path}/access_log-$VIRTUALHOST"
-      error_log="${log_folder_path}/error_log-$VIRTUALHOST"
+      access_log="${log_folder_path}/$VIRTUALHOST-access_log"
+      error_log="${log_folder_path}/$VIRTUALHOST-error_log"
     else
       log_folder_path=$FOLDER/logs
       access_log="${log_folder_path}/access_log"
@@ -362,10 +373,8 @@ __EOT
 # Created $date
 <VirtualHost *:$APACHE_PORT>
   DocumentRoot "$2"
-  ServerName $VIRTUALHOST
+  $SERVER_NAME
   $SERVER_ALIAS
-
-  ScriptAlias /cgi-bin "$2/cgi-bin"
 
   $DIRECTORY
 
@@ -779,10 +788,14 @@ esac
 
 if ! checkyesno ${SKIP_ETC_HOSTS}; then
   if ! host_exists $VIRTUALHOST ; then
-
+    if [ ! -z $WILDCARD_ZONE ]; then
+      HOST=$VIRTUALHOST.$WILDCARD_ZONE
+    else
+      HOST=$VIRTUALHOST
+    fi
     /bin/echo "Creating a virtualhost for $VIRTUALHOST..."
     /bin/echo -n "+ Adding $VIRTUALHOST to /etc/hosts... "
-    /bin/echo "$IP_ADDRESS  $VIRTUALHOST" >> /etc/hosts
+    /bin/echo "$IP_ADDRESS  $HOST" >> /etc/hosts
     /bin/echo "done"
   fi
 fi
@@ -805,8 +818,6 @@ if [ -z "$FOLDER" ]; then
     else
       if [ $MAX_SEARCH_DEPTH -eq 0 ]; then
         /bin/echo -n " searching with no a maximum depth. This could take a really long time..."
-      else
-        /bin/echo -n " searching to a maximum directory depth of $MAX_SEARCH_DEPTH. This could take some time..."
       fi
       nested_match=`find $DOC_ROOT_PREFIX -maxdepth $MAX_SEARCH_DEPTH -type d -name $VIRTUALHOST 2>/dev/null`
 
@@ -844,7 +855,7 @@ if [ -z "$FOLDER" ]; then
 
     *)
       if [ -d $DOC_ROOT_FOLDER_MATCH/public ]; then
-        /bin/echo -n "  - Found a public folder suggesting a Rails/Rack project. Use as DocumentRoot? [Y/n] "
+        /bin/echo -n "  - Found a public folder suggesting a Zend Framework project. Use as DocumentRoot? [Y/n] "
         if [ -z "$BATCH_MODE" ]; then
           read response
         else
@@ -869,8 +880,10 @@ if [ -z "$FOLDER" ]; then
         else
           FOLDER=$DOC_ROOT_FOLDER_MATCH
         fi
-      else
+      elif [ -z "$DOCUMENT_ROOT_PUBLIC_FOLDER" ]; then
         FOLDER=$DOC_ROOT_FOLDER_MATCH
+      else
+        FOLDER=$DOC_ROOT_FOLDER_MATCH/$DOCUMENT_ROOT_PUBLIC_FOLDER
       fi
     ;;
   esac
@@ -1014,11 +1027,19 @@ fi
 $APACHECTL graceful 1>/dev/null 2>/dev/null
 /bin/echo "done"
 
-cat << __EOF
+if [ ! -z $WILDCARD_ZONE ]; then
+  cat << __EOF
 
-http://$VIRTUALHOST:$APACHE_PORT/ is set up and ready for use.
+http://$VIRTUALHOST.$WILDCARD_ZONE:$APACHE_PORT/ is setup and ready for use.
 
 __EOF
+else
+  cat << __EOF
+
+http://$VIRTUALHOST:$APACHE_PORT/ is setup and ready for use.
+
+__EOF
+fi
 
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
