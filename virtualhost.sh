@@ -2,13 +2,45 @@
 #================================================================================
 # virtualhost.sh
 #
-# A fancy little script to setup a new virtualhost in Mac OS X.
+# A fancy little script to set up a new virtualhost in Mac OS X.
 #
 # If you want to delete a virtualhost that you've created, you need to:
 #
 # sudo ./virtualhost.sh --delete <site>
 #
 # where <site> is the site name you used when you first created the host.
+#
+# WHAT'S NEW IN v1.34
+#
+# - Fix for using the GitHub API to check for new releases.
+#
+# WHAT'S NEW IN v1.33
+#
+# - Edit functionality added, `sudo virtualhost.sh --edit example.dev` opens
+#   the example.dev VirtualHost in your $EDITOR.
+# - Now uses the GitHub API to check for new releases.
+# - Checking for new releases is only done once per hour.
+#
+# WHAT'S NEW IN v1.32
+#
+# - Moved the project to a GitHub organization:
+#   https://github.com/virtualhost/virtualhost.sh
+# - OS X Yosemite (Apache 2.4.x) compatibility, thanks @rubenvarela
+#   @Nainterceptor! Your existing VirtualHosts need to be updated, see
+#   http://httpd.apache.org/docs/2.4/upgrading.html#access. An automated
+#   upgrade process is planned, see
+#   https://github.com/virtualhost/virtualhost.sh/issues/63.
+# - An optional second argument has been added to specify the DocumentRoot for
+#   cases where folder matching is not appropriate:
+#   `sudo virtualhost.sh example.dev ~/Sites/my-example.dev`
+# - sudo is no longer required when running `virtualhost.sh --list`.
+# - New CREATE_INDEX option to suppress writing the default index.html if an
+#   index is not already present.
+# - The script no longer overrides variables that are already set in the
+#   environment, so anything you would normally set in ~/.virtualhost.sh.conf
+#   can be set inline as well:
+#   `SKIP_BROWSER="yes" virtualhost.sh foobar.dev`
+# - The script now exits early when the DocumentRoot folder can't be created.
 #
 # WHAT'S NEW IN v1.31
 #
@@ -44,7 +76,7 @@
 #
 # WHAT'S NEW IN v1.25
 #
-# - Added --list option to list any virtualhosts that have been setup
+# - Added --list option to list any virtualhosts that have been set up
 #
 # WHAT'S NEW IN v1.24 (courtesy of http://github.com/aersoy)
 #
@@ -148,18 +180,18 @@
 # by Patrick Gibson <patrick@patrickg.com>
 #================================================================================
 # Don't change this!
-version="1.31"
+version="1.34"
 #
 
 # No point going any farther if we're not running correctly...
-if [ `whoami` != 'root' ]; then
+if [ `whoami` != 'root' -a "$1" != "--list" ]; then
   echo "virtualhost.sh requires super-user privileges to work."
   echo "Enter your password to continue..."
-  sudo "$0" $* || exit 1
+  sudo -E "$0" $* || exit 1
   exit 0
 fi
 
-if [ "$SUDO_USER" = "root" ]; then
+if [ "$SUDO_USER" = "root" -a "$1" != "--list" ]; then
   /bin/echo "You must start this under your regular user account (not root) using sudo."
   /bin/echo "Rerun using: sudo $0 $*"
   exit 1
@@ -167,10 +199,10 @@ fi
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # If you are using this script on a production machine with a static IP address,
-# and you wish to setup a "live" virtualhost, you can change the following IP
+# and you wish to set up a "live" virtualhost, you can change the following IP
 # address to the IP address of your machine.
 #
-IP_ADDRESS="127.0.0.1"
+: ${IP_ADDRESS:="127.0.0.1"}
 
 # By default, this script places files in /Users/[you]/Sites. If you would like
 # to change this, like to how Apple does things by default, uncomment the
@@ -180,12 +212,12 @@ IP_ADDRESS="127.0.0.1"
 
 # Configure the apache-related paths
 #
-APACHE_CONFIG="/private/etc/apache2"
-APACHECTL="/usr/sbin/apachectl"
+: ${APACHE_CONFIG:="/private/etc/apache2"}
+: ${APACHECTL:="/usr/sbin/apachectl"}
 
 # If you wish to change the default application that gets launched after the
 # virtual host is created, define it here:
-OPEN_COMMAND="/usr/bin/open"
+: ${OPEN_COMMAND:="/usr/bin/open"}
 
 # If you want to use a different browser than Safari, define it here:
 #BROWSER="Firefox"
@@ -210,11 +242,11 @@ OPEN_COMMAND="/usr/bin/open"
 # A feature to specify a custom log location within your site's document root
 # was requested, and so you will be prompted about this when you create a new
 # virtual host. If you do not want to be prompted, set the following to "no":
-PROMPT_FOR_LOGS="no"
+: ${PROMPT_FOR_LOGS:="no"}
 
 # If you do not want to be prompted, but you do always want to have the site-
 # specific logs folder, set PROMPT_FOR_LOGS="no" and enable this:
-ALWAYS_CREATE_LOGS="yes"
+: ${ALWAYS_CREATE_LOGS:="yes"}
 
 # By default, log files will be created in DOCUMENT_ROOT/logs. If you wish to
 # override this to a static location, you can do so here.
@@ -224,21 +256,21 @@ ALWAYS_CREATE_LOGS="yes"
 
 # If you have an atypical setup, and you don't need or want entries in your
 # /etc/hosts file, you can set the following option to "yes".
-SKIP_ETC_HOSTS="no"
+: ${SKIP_ETC_HOSTS:="no"}
 
 # If you are running this script on a platform other than Mac OS X, your home
 # partition is going to be different. If so, change it here.
-HOME_PARTITION="/Users"
+: ${HOME_PARTITION:="/Users"}
 
 # If your environment has a different default DocumentRoot, and you don't want
 # to be nagged about "fixing" your DocumentRoot, set this to "yes".
-SKIP_DOCUMENT_ROOT_CHECK="no"
+: ${SKIP_DOCUMENT_ROOT_CHECK:="no"}
 
 # The document root folder to use in your host
 DOCUMENT_ROOT_PUBLIC_FOLDER="public"
 
 # If Apache works on a different port than the default 80, set it here
-APACHE_PORT="80"
+: ${APACHE_PORT:="80"}
 
 # Batch mode (all prompting will assume Yes). Any value will activate this. Can
 # be set here, in ~/.virtualhost.sh.conf, or on the command line, like:
@@ -247,20 +279,20 @@ APACHE_PORT="80"
 
 # If you're satisfied with the version you have and do not wish to be reminded
 # of a new version, add the following line to your ~/.virtualhost.sh.conf file.
-SKIP_VERSION_CHECK="yes"
+: ${SKIP_VERSION_CHECK:="yes"}
 
 # We now will search your $DOC_ROOT_PREFIX for a matching subfolder using find.
 # By default, we will go two levels deep so that it doesn't take too long. If
 # you have a really complex structure, you may need to increase this.
-MAX_SEARCH_DEPTH=2
+: ${MAX_SEARCH_DEPTH:="2"}
 
 # Set to "yes" if you don't have a browser (headless) or don't want the site
-# to be launched in your browser after the virtualhost is setup.
+# to be launched in your browser after the virtualhost is set up.
 #SKIP_BROWSER="yes"
 
-# Set to "yes" the script won't create a default index.html in the host's
-# document root
-SKIP_DOCUMENT_ROOT_DEFAULT_FILE="yes"
+# By default, we'll write out an index.html file in the DOCUMENT_ROOT if one
+# is not already present.
+: ${CREATE_INDEX:="yes"}
 
 # You can now store your configuration directions in a ~/.virtualhost.sh.conf
 # file so that you can download new versions of the script without having to
@@ -273,7 +305,7 @@ fi
 
 host_exists()
 {
-  if grep -q -e "^$IP_ADDRESS  $1$" /etc/hosts ; then
+  if grep -q -e "^$IP_ADDRESS  $VIRTUALHOST$" /etc/hosts ; then
     return 0
   else
     return 1
@@ -325,6 +357,29 @@ create_virtualhost()
     chown $USER $access_log $error_log
   fi
 
+  # The <Directory> directive is different for Apache 2.4+.
+  # Reference: http://httpd.apache.org/docs/2.4/upgrading.html
+  if (( $APACHE_MAJOR_VERSION >= 2 )) && (( $APACHE_MINOR_VERSION >= 4 )); then
+    DIRECTORY=$(cat << __EOT
+<Directory "$2">
+    Options All
+    AllowOverride All
+    Require all granted
+  </Directory>
+__EOT
+    )
+  else
+    DIRECTORY=$(cat << __EOT
+<Directory "$2">
+    Options All
+    AllowOverride All
+    Order allow,deny
+    Allow from all
+  </Directory>
+__EOT
+    )
+  fi
+
   cat << __EOF >$APACHE_CONFIG/virtualhosts/$1
 # Created $date
 <VirtualHost *:$APACHE_PORT>
@@ -332,18 +387,24 @@ create_virtualhost()
   $SERVER_NAME
   $SERVER_ALIAS
 
-  <Directory "$2">
-    Options All
-    AllowOverride All
-    Order allow,deny
-    Allow from all
-  </Directory>
+  ScriptAlias /cgi-bin "$2/cgi-bin"
+
+  $DIRECTORY
 
   ${log}CustomLog "${access_log}" combined
   ${log}ErrorLog "${error_log}"
 
 </VirtualHost>
 __EOF
+}
+
+edit_virtualhost()
+{
+  if [ -e $APACHE_CONFIG/virtualhosts/$VIRTUALHOST ]; then
+    $EDITOR $APACHE_CONFIG/virtualhosts/$VIRTUALHOST
+  else
+    /bin/echo "VirtualHost $VIRTUALHOST not found."
+  fi
 }
 
 cleanup()
@@ -375,8 +436,23 @@ checkyesno()
 
 version_check()
 {
+  # Only check for a new version once every 60 minutes.
+  current_time=`date +%s`
+  last_update_check_file="${HOME_PARTITION}/$USER/.virtualhost.sh/last_update_check"
+  if [ -e "$last_update_check_file" ]; then
+    last_checked=`cat "$last_update_check_file"`
+    due_for_a_check=`/bin/echo "$last_checked < ($current_time - 3600)" | /usr/bin/bc`
+    if [ $due_for_a_check -eq 0 ]; then
+      return 0
+    fi
+  elif [ ! -d "${HOME_PARTITION}/$USER/.virtualhost.sh" ]; then
+    # Set up the last update check directory if it's not there yet.
+    mkdir "${HOME_PARTITION}/$USER/.virtualhost.sh"
+  fi
+
   /bin/echo -n "Checking for updates... "
-  current_version=`dig +tries=1 +time=1 +retry=0 txt virtualhost.patrickgibson.com | grep -e '^virtualhost' | awk '{print $5}' | sed -e 's/"//g'`
+  current_version=`curl --silent https://api.github.com/repos/virtualhost/virtualhost.sh/releases | grep tag_name -m 1 | awk '{print $2}' | sed -e 's/[^0-9.]//g'`
+  /bin/echo $current_time > "$last_update_check_file"
 
   # See if we have the latest version
   if [ -n "$current_version" ]; then
@@ -390,18 +466,18 @@ version_check()
         read resp
       else
         /bin/echo "A newer version ($current_version) of virtualhost.sh is available."
-        /bin/echo "Visit https://github.com/pgib/virtualhost.sh to go get it."
+        /bin/echo "Visit https://github.com/virtualhost/virtualhost.sh to go get it."
         resp="n"
       fi
 
       case $resp in
       y*|Y*)
-        open_command "https://github.com/pgib/virtualhost.sh"
+        open_command "https://github.com/virtualhost/virtualhost.sh"
         exit
       ;;
 
       *)
-        /bin/echo "Okay. At your convenience, visit: https://github.com/pgib/virtualhost.sh"
+        /bin/echo "Okay. At your convenience, visit: https://github.com/virtualhost/virtualhost.sh"
         /bin/echo
       ;;
       esac
@@ -415,8 +491,17 @@ version_check()
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-# Make sure this is an Apache 2.x / Leopard machine
-if [ ! -d $APACHE_CONFIG ]; then
+# Get the Apache version number to check compatibility.
+APACHE_VERSION=$(${APACHECTL} -v | perl -ne 'print $1 if /Apache\/([0-9.]+)/')
+
+# Extract the major, minor, and patch numbers from the Apache version for
+# easier version comparisons.
+IFS='.'
+read APACHE_MAJOR_VERSION APACHE_MINOR_VERSION APACHE_PATCH_VERSION <<< "$APACHE_VERSION"
+unset IFS
+
+# Check for Apache 2.x.
+if (( $APACHE_MAJOR_VERSION < 2 )); then
   /bin/echo "Could not find ${APACHE_CONFIG}"
   /bin/echo "Sorry, this version of virtualhost.sh only works with Leopard. You can download an older version which works with previous versions of Mac OS X here:"
   /bin/echo
@@ -424,10 +509,6 @@ if [ ! -d $APACHE_CONFIG ]; then
   /bin/echo
 
   exit 1
-fi
-
-if [ -z $SKIP_VERSION_CHECK ]; then
-  version_check
 fi
 
 # catch Ctrl-C
@@ -466,11 +547,16 @@ if [ -z $DOC_ROOT_PREFIX ]; then
   DOC_ROOT_PREFIX="${HOME_PARTITION}/$USER/Sites"
 fi
 
+if [ -z $SKIP_VERSION_CHECK ]; then
+  version_check
+fi
+
 usage()
 {
   cat << __EOT
-Usage: sudo virtualhost.sh <name>
+Usage: sudo virtualhost.sh <name> [<optional path>]
        sudo virtualhost.sh --list
+       sudo virtualhost.sh --edit <name>
        sudo virtualhost.sh --delete <name>
    where <name> is the one-word name you'd like to use. (e.g. mysite)
 
@@ -501,12 +587,22 @@ else
         echo "http://${server_name}/ -> ${doc_root}"
       done
     else
-      echo "No virtualhosts have been setup yet."
+      echo "No virtualhosts have been set up yet."
     fi
 
     exit
+  elif [ "$1" = "--edit" ]; then
+    if [ -z $2 ]; then
+      usage
+    else
+      VIRTUALHOST=`echo $2|sed -e 's/\///g'`
+      edit_virtualhost
+
+      exit
+    fi
   else
     VIRTUALHOST=`echo $1|sed -e 's/\///g'`
+    FOLDER=`echo $2 | sed -e 's/\/*$//'`
   fi
 fi
 
@@ -739,93 +835,104 @@ fi
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # Ask the user where they would like to put the files for this virtual host
+# if a document root hasn't been specified as a second argument.
 #
-/bin/echo "+ Looking in $DOC_ROOT_PREFIX for an existing document root to use..."
+if [ -z "$FOLDER" ]; then
+  /bin/echo "+ Looking in $DOC_ROOT_PREFIX for an existing document root to use..."
 
-# See if we can find an appropriate folder
-if ls -1 $DOC_ROOT_PREFIX | grep -q -e "^$VIRTUALHOST"; then
-  DOC_ROOT_FOLDER_MATCH=`ls -1 $DOC_ROOT_PREFIX | grep -e ^$VIRTUALHOST | head -n 1`
-  DOC_ROOT_FOLDER_MATCH="${DOC_ROOT_PREFIX}/${DOC_ROOT_FOLDER_MATCH}"
-else
-  if [ -d $DOC_ROOT_PREFIX/$VIRTUALHOST ]; then
-    DOC_ROOT_FOLDER_MATCH="$DOC_ROOT_PREFIX/$VIRTUALHOST"
+  # See if we can find an appropriate folder
+  if ls -1 $DOC_ROOT_PREFIX | grep -q -e "^$VIRTUALHOST"; then
+    DOC_ROOT_FOLDER_MATCH=`ls -1 $DOC_ROOT_PREFIX | grep -e ^$VIRTUALHOST | head -n 1`
+    DOC_ROOT_FOLDER_MATCH="${DOC_ROOT_PREFIX}/${DOC_ROOT_FOLDER_MATCH}"
   else
-    if [ $MAX_SEARCH_DEPTH -eq 0 ]; then
-      /bin/echo -n " searching with no a maximum depth. This could take a really long time..."
-    fi
-    nested_match=`find $DOC_ROOT_PREFIX -maxdepth $MAX_SEARCH_DEPTH -type d -name $VIRTUALHOST 2>/dev/null`
-
-    if [ -n "$nested_match" ]; then
-      if [ -d $nested_match ]; then
-        DOC_ROOT_FOLDER_MATCH=$nested_match
-      fi
-    else
+    if [ -d $DOC_ROOT_PREFIX/$VIRTUALHOST ]; then
       DOC_ROOT_FOLDER_MATCH="$DOC_ROOT_PREFIX/$VIRTUALHOST"
+    else
+      if [ $MAX_SEARCH_DEPTH -eq 0 ]; then
+        /bin/echo -n " searching with no a maximum depth. This could take a really long time..."
+      else
+        /bin/echo -n " searching to a maximum directory depth of $MAX_SEARCH_DEPTH. This could take some time..."
+      fi
+      nested_match=`find $DOC_ROOT_PREFIX -maxdepth $MAX_SEARCH_DEPTH -type d -name $VIRTUALHOST 2>/dev/null`
+
+      if [ -n "$nested_match" ]; then
+        if [ -d $nested_match ]; then
+          DOC_ROOT_FOLDER_MATCH=$nested_match
+        fi
+      else
+        DOC_ROOT_FOLDER_MATCH="$DOC_ROOT_PREFIX/$VIRTUALHOST"
+      fi
     fi
   fi
-fi
 
-/bin/echo -n "  - Use $DOC_ROOT_FOLDER_MATCH as the virtualhost folder? [Y/n] "
+/bin/echo "  - Use $DOC_ROOT_FOLDER_MATCH as the virtualhost folder? [Y/n] "
 
-if [ -z "$BATCH_MODE" ]; then
-  read resp
-else
-  resp="Y"
-  echo $resp
-fi
+  if [ -z "$BATCH_MODE" ]; then
+    read resp
+  else
+    resp="Y"
+    echo $resp
+  fi
 
-case $resp in
+  case $resp in
 
-  n*|N*)
-    while : ; do
-      if [ -z "$FOLDER" ]; then
-        /bin/echo -n "  - Enter new folder name (located in $DOC_ROOT_PREFIX): "
-        read FOLDER
-      else
-        break
-      fi
-    done
-  ;;
+    n*|N*)
+      while : ; do
+        if [ -z "$FOLDER" ]; then
+          /bin/echo -n "  - Enter new folder name (located in $DOC_ROOT_PREFIX): "
+          read FOLDER
+        else
+          break
+        fi
+      done
+    ;;
 
-  *)
-    if [ -d $DOC_ROOT_FOLDER_MATCH/public ]; then
-      /bin/echo -n "  - Found a public folder suggesting a Zend Framework project. Use as DocumentRoot? [Y/n] "
-      if [ -z "$BATCH_MODE" ]; then
-        read response
-      else
-        response="Y"
-        echo $response
-      fi
-      if checkyesno ${response} ; then
-        FOLDER=$DOC_ROOT_FOLDER_MATCH/public
-      else
+    *)
+      if [ -d $DOC_ROOT_FOLDER_MATCH/public ]; then
+        /bin/echo -n "  - Found a public folder suggesting a Zend Framework project. Use as DocumentRoot? [Y/n] "
+        if [ -z "$BATCH_MODE" ]; then
+          read response
+        else
+          response="Y"
+          echo $response
+        fi
+        if checkyesno ${response} ; then
+          FOLDER=$DOC_ROOT_FOLDER_MATCH/public
+        else
+          FOLDER=$DOC_ROOT_FOLDER_MATCH
+        fi
+      elif [ -d $DOC_ROOT_FOLDER_MATCH/web ]; then
+        /bin/echo -n "  - Found a web folder suggesting a Symfony project. Use as DocumentRoot? [Y/n] "
+        if [ -z "$BATCH_MODE" ]; then
+          read response
+        else
+          response="Y"
+          echo $response
+        fi
+        if checkyesno ${response} ; then
+          FOLDER=$DOC_ROOT_FOLDER_MATCH/web
+        else
+          FOLDER=$DOC_ROOT_FOLDER_MATCH
+        fi
+      elif [ -z "$DOCUMENT_ROOT_PUBLIC_FOLDER" ]; then
         FOLDER=$DOC_ROOT_FOLDER_MATCH
-      fi
-    elif [ -d $DOC_ROOT_FOLDER_MATCH/web ]; then
-      /bin/echo -n "  - Found a web folder suggesting a Symfony project. Use as DocumentRoot? [Y/n] "
-      if [ -z "$BATCH_MODE" ]; then
-        read response
       else
-        response="Y"
-        echo $response
+        FOLDER=$DOC_ROOT_FOLDER_MATCH/$DOCUMENT_ROOT_PUBLIC_FOLDER
       fi
-      if checkyesno ${response} ; then
-        FOLDER=$DOC_ROOT_FOLDER_MATCH/web
-      else
-        FOLDER=$DOC_ROOT_FOLDER_MATCH
-      fi
-    elif [ -z "$DOCUMENT_ROOT_PUBLIC_FOLDER" ]; then
-      FOLDER=$DOC_ROOT_FOLDER_MATCH
-    else
-      FOLDER=$DOC_ROOT_FOLDER_MATCH/$DOCUMENT_ROOT_PUBLIC_FOLDER
-    fi
-  ;;
-esac
+    ;;
+  esac
+fi
 
 # Create the folder if we need to...
 if [ ! -d "${FOLDER}" ]; then
   /bin/echo -n "  + Creating folder ${FOLDER}... "
   su $USER -c "mkdir -p $FOLDER"
+
+  # Error out if the folder was not created.
+  if [ ! -d "${FOLDER}" ]; then
+    /bin/echo "  # Fatal: could not create ${FOLDER}"
+    exit 1
+  fi
   /bin/echo "done"
 fi
 
@@ -865,10 +972,10 @@ fi
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # Create a default index.html if there isn't already one there
 #
-if ! checkyesno ${SKIP_DOCUMENT_ROOT_DEFAULT_FILE} ; then
-    if [ ! -e "${FOLDER}/index.html" -a ! -e "${FOLDER}/index.php" ]; then
-
-  cat << __EOF >"${FOLDER}/index.html"
+if checkyesno ${CREATE_INDEX}; then
+  if [ ! -e "${FOLDER}/index.html" -a ! -e "${FOLDER}/index.php" ]; then
+    /bin/echo -n "+ Creating 'index.html'... "
+    cat << __EOF >"${FOLDER}/index.html"
 <html>
 <head>
 <title>Welcome to $VIRTUALHOST</title>
@@ -887,7 +994,7 @@ if ! checkyesno ${SKIP_DOCUMENT_ROOT_DEFAULT_FILE} ; then
  </div>
 
  <div align="left">
-  <p>If you are reading this in your web browser, then the only logical conclusion is that the <b><a href="http://$VIRTUALHOST:$APACHE_PORT/">http://$VIRTUALHOST:$APACHE_PORT/</a></b> virtualhost was setup correctly. :)</p>
+  <p>If you are reading this in your web browser, then the only logical conclusion is that the <b><a href="http://$VIRTUALHOST:$APACHE_PORT/">http://$VIRTUALHOST:$APACHE_PORT/</a></b> virtualhost was set up correctly. :)</p>
 
   <p>You can find the configuration file for this virtual host in:<br>
   <table class="indent" border="0" cellspacing="3">
@@ -923,9 +1030,9 @@ if ! checkyesno ${SKIP_DOCUMENT_ROOT_DEFAULT_FILE} ; then
 </body>
 </html>
 __EOF
-  chown $USER "${FOLDER}/index.html"
-
-    fi
+    /bin/echo "done"
+    chown $USER "${FOLDER}/index.html"
+  fi
 fi
 
 
@@ -963,7 +1070,7 @@ __EOF
 else
   cat << __EOF
 
-http://$VIRTUALHOST:$APACHE_PORT/ is setup and ready for use.
+http://$VIRTUALHOST:$APACHE_PORT/ is set up and ready for use.
 
 __EOF
 fi
